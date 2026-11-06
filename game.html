@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>메타 퀘스트 청기백기 VR v4 | 녹음된 음성 명령</title>
+  <meta name="description" content="메타 퀘스트 3S 컨트롤러 두 개로 즐기는 청기백기 WebXR 게임">
+  <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, 'Malgun Gothic', sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; overflow: hidden; background: #0a1530; }
+    #info {
+      position: fixed; top: 14px; left: 14px; z-index: 5; width: min(395px, calc(100% - 28px));
+      padding: 18px 20px; background: rgba(11,20,42,.93); border: 1px solid #4b6384;
+      border-radius: 18px; color: #fff; box-shadow: 0 12px 45px #0007;
+    }
+    #info h1 { font-size: 23px; margin: 0 0 8px; }
+    #info p { margin: 6px 0; color: #d0def3; font-size: 14px; line-height: 1.55; }
+    #info button {
+      border: 0; background: #31b6f5; color: #061427; font-weight: 800; font-size: 15px;
+      padding: 12px 14px; border-radius: 10px; cursor: pointer;
+    }
+    #info button.secondary { background: #273a5b; color: white; }
+    #info .buttons { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
+    #info #live { color: #8ce8b3; font-weight: 700; }
+    #info small { color: #b9c8de; display: block; line-height: 1.5; margin-top: 10px; }
+    #footer { position: fixed; bottom: 14px; left: 14px; z-index: 5; color: #d5e6ff; font-size: 12px; }
+    @media (max-width: 500px) { #info { padding: 13px 14px; } #info h1 { font-size: 19px; } }
+  </style>
+</head>
+<body>
+  <!-- 브라우저 2D 화면에서만 보이는 도움말. VR에서는 아래 3D 패널을 봅니다. -->
+  <aside id="info">
+    <h1>🚩 청기백기 VR 챌린지 v4</h1>
+    <p><strong>왼손 = 청기 🔵 / 오른손 = 백기 ⚪</strong></p>
+    <p>퀘스트 브라우저에서 오른쪽 아래 <strong>VR 진입</strong>을 누르세요. 양손 컨트롤러를 아래로 내린 상태에서 <strong>트리거</strong>를 누르면 시작됩니다. 아래 VR 전광판에서 연결 상태와 손 높이를 확인할 수 있습니다.</p>
+    <p>녹음한 한국어 음성 명령을 듣고 컨트롤러를 움직이세요. 명령 음성이 끝나면 제한시간 7초가 시작됩니다. 첫 시작과 재시작 때는 양손을 내린 상태에서 다시 기준 높이를 측정합니다.</p>
+    <div class="buttons">
+      <button id="desktopStart" type="button">PC 연습 시작</button>
+      <button id="toneTest" type="button" class="secondary">🔔 효과음 테스트</button>
+      <button id="soundTest" type="button" class="secondary">🔊 명령 음성 테스트</button>
+      <button id="soundToggle" type="button" class="secondary">음성: 켜짐</button>
+      <button id="textToggle" type="button" class="secondary">명령 글자: 숨김</button>
+    </div>
+    <p id="live" aria-live="polite">VR 모드에서 트리거를 눌러 시작</p>
+    <small>PC 테스트: <strong>Q</strong> = 청기, <strong>P</strong> = 백기, <strong>스페이스</strong> = 시작/재시작. VR에서는 <strong>왼손 X</strong> = 명령 다시 듣기, <strong>왼손 Y</strong> = 명령 글자 보이기/숨기기. 음성은 녹음 파일로 재생합니다. PC에서 <a href="make_voice.html" style="color:#7fdcff">음성팩 만들기</a>를 열고 녹음한 뒤 voice-pack.json을 재배포하세요.</small>
+  </aside>
+  <div id="footer">v4 녹음 음성 재생 · WebXR · Netlify에 폴더 전체 배포</div>
+
+  <a-scene id="scene" embedded="false" background="color: #09182F"
+    renderer="antialias: true; colorManagement: true"
+    vr-mode-ui="enabled: true"
+    webxr="referenceSpaceType: local-floor; optionalFeatures: local-floor, bounded-floor"
+    game-manager>
+    <a-sky color="#08182E"></a-sky>
+    <a-circle position="0 0 -1.8" rotation="-90 0 0" radius="12" color="#183757"></a-circle>
+    <a-circle position="0 0.006 -1.8" rotation="-90 0 0" radius="1.0" color="#285879" material="opacity: 0.38; transparent: true"></a-circle>
+    <a-ring position="0 0.012 0" rotation="-90 0 0" radius-inner="0.6" radius-outer="0.64" color="#45DBE5"></a-ring>
+    <a-light type="ambient" intensity="0.9" color="#C8DBFF"></a-light>
+    <a-light type="directional" intensity="0.75" position="-2 5 3" color="#FFFFFF"></a-light>
+
+    <!-- 한글은 A-Frame 기본 텍스트 폰트 대신 HTML Canvas를 3D 텍스처로 사용합니다. -->
+    <a-plane id="screen" position="0 1.75 -3.3" width="3.45" height="2.16"
+      material="shader: flat; color: #142544; side: double"></a-plane>
+    <a-box position="0 0.6 -3.45" width="3.6" height="0.08" depth="0.18" color="#35A6D2"></a-box>
+    <a-box position="-1.79 1.67 -3.48" width="0.10" height="2.28" depth="0.15" color="#243E65"></a-box>
+    <a-box position="1.79 1.67 -3.48" width="0.10" height="2.28" depth="0.15" color="#243E65"></a-box>
+
+    <a-entity id="rig" position="0 0 0">
+      <a-entity id="head" camera look-controls wasd-controls="enabled: false" position="0 1.6 0"></a-entity>
+      <!-- 양쪽 터치 컨트롤러의 실제 6DoF 위치를 A-Frame이 읽습니다. -->
+      <a-entity id="leftController" meta-touch-controls="hand: left; model: true">
+        <a-entity id="leftFlag" visible="false" position="0 0.08 -0.09">
+          <a-cylinder position="0 0.29 0" radius="0.012" height="0.76" color="#E8EFFA"></a-cylinder>
+          <a-box position="0.155 0.55 0" width="0.30" height="0.22" depth="0.009" color="#1689FF"></a-box>
+          <a-sphere position="0 0.68 0" radius="0.027" color="#FFF1B4"></a-sphere>
+        </a-entity>
+      </a-entity>
+      <a-entity id="rightController" meta-touch-controls="hand: right; model: true">
+        <a-entity id="rightFlag" visible="false" position="0 0.08 -0.09">
+          <a-cylinder position="0 0.29 0" radius="0.012" height="0.76" color="#E8EFFA"></a-cylinder>
+          <a-box position="0.155 0.55 0" width="0.30" height="0.22" depth="0.009" color="#FFFFFF"></a-box>
+          <a-sphere position="0 0.68 0" radius="0.027" color="#FFF1B4"></a-sphere>
+        </a-entity>
+      </a-entity>
+    </a-entity>
+  </a-scene>
+
+<script>
+  'use strict';
+  // v4: 장치의 음성 합성(TTS)에 의존하지 않고 녹음된 WAV/MP3 파일을 재생합니다.
+  const SETTINGS = {
+    totalRounds: 10,
+    roundMs: 7000,       // 지시 음성이 끝난 뒤부터 7초
+    feedbackMs: 1400,
+    calibrateMs: 2800,   // 첫 시작 + 재시작마다 기준 높이 다시 측정
+    upMeters: 0.30,
+    downMeters: 0.14,
+    stateStableMs: 170,  // 잠깐의 위치 튐을 무시
+    correctHoldMs: 500, // 정답 자세 0.5초 유지
+    speechTimeoutMs: 12000
+  };
+  const COMMANDS = [
+    {text:'청기 올려!', blue:true},
+    {text:'청기 내려!', blue:false},
+    {text:'백기 올려!', white:true},
+    {text:'백기 내려!', white:false},
+    {text:'청기 올리고 백기 내려!', blue:true, white:false},
+    {text:'백기 올리고 청기 내려!', blue:false, white:true},
+    {text:'청기와 백기 모두 올려!', blue:true, white:true},
+    {text:'청기와 백기 모두 내려!', blue:false, white:false}
+  ];
+  const game = {
+    phase:'ready', vr:false, voice:true, voiceOnly:true,
+    connected:{blue:false,white:false},
+    baseline:{blue:0,white:0},
+    actual:{blue:false,white:false},
+    target:{blue:false,white:false},
+    smooth:{blue:null,white:null},
+    pending:{blue:null,white:null},
+    pendingAt:{blue:0,white:0},
+    lastY:{blue:null,white:null},
+    samples:{blue:[],white:[]},
+    trackingMissing:false,
+    round:0, score:0, combo:0, bestCombo:0,
+    command:'양손을 아래로 내리고 트리거를 누르세요', lastCommand:'',
+    countdownAt:0, deadline:0, nextAt:0, holdSince:0,
+    feedback:'', feedbackGood:false,
+    speechToken:0, spokenStarted:false, speechFallbackAt:0,
+    status:'VR 모드에서 트리거를 누르세요', audioStatus:'효과음 테스트를 눌러 주세요'
+  };
+  const ui={
+    scene:document.getElementById('scene'),
+    blue:document.getElementById('leftController'),
+    white:document.getElementById('rightController'),
+    blueFlag:document.getElementById('leftFlag'),
+    whiteFlag:document.getElementById('rightFlag'),
+    live:document.getElementById('live'),
+    info:document.getElementById('info'),
+    footer:document.getElementById('footer')
+  };
+  const handButtons={blue:{trigger:false,x:false,y:false},white:{trigger:false}};
+  const position=new THREE.Vector3();
+  let sessionWithEvent=null, panelTexture=null, lastPanelDraw=0, audioCtx=null;
+
+  window.addEventListener('error', event=>{
+    ui.live.textContent='오류: '+event.message;
+  });
+  // Quest Browser는 SpeechSynthesisUtterance를 제공해도 한국어를 말하지 않을 수 있습니다.
+  // 별도 음성팩(voice-pack.json)에 포함된 실제 오디오 파일을 HTMLAudioElement로 재생합니다.
+  const voicePlayer=new Audio();
+  voicePlayer.preload='auto';
+  let voiceClips={};
+  let voicePackLoaded=false;
+  const allVoiceCommands=COMMANDS.map(c=>c.text);
+  const voicePackPromise=fetch('./voice-pack.json?v=4', {cache:'no-store'})
+    .then(async r=>{
+      if(!r.ok)throw Error('음성팩 파일이 없습니다');
+      const data=await r.json();
+      voiceClips=data.clips||{};
+      voicePackLoaded=true;
+      const missing=allVoiceCommands.filter(x=>!voiceClips[x]);
+      if(missing.length){
+        game.audioStatus=`녹음된 명령 ${allVoiceCommands.length-missing.length}/${allVoiceCommands.length}개 · PC에서 음성팩 만들기`;
+        game.voiceOnly=false;
+      }else{
+        game.audioStatus='명령 음성 준비 완료';
+        game.voiceOnly=true;
+      }
+      syncButtons();
+      return data;
+    })
+    .catch(e=>{
+      game.audioStatus='음성팩 로딩 실패: '+e.message;
+      game.voiceOnly=false;
+      syncButtons();
+    });
+  function stopSpeech(){
+    game.speechToken++;
+    voicePlayer.pause();
+    voicePlayer.onended=null;
+    voicePlayer.onerror=null;
+    try {voicePlayer.currentTime=0;} catch(e){}
+  }
+  function speechKey(message){
+    if(message.startsWith('청기 백기 게임을 시작합니다.'))return '__intro__';
+    if(message.startsWith('게임 끝!'))return '__finish__';
+    return message;
+  }
+  function speak(message, done){
+    stopSpeech();
+    const token=game.speechToken;
+    if(!game.voice){if(done)done(false);return;}
+    const key=speechKey(message);
+    const src=voiceClips[key];
+    if(!src){
+      game.audioStatus='녹음 파일 없음: 명령은 글자로 표시됩니다';
+      game.voiceOnly=false;syncButtons();
+      if(done)done(false);
+      return;
+    }
+    let settled=false;
+    function finish(ok){
+      if(settled || token!==game.speechToken)return;
+      settled=true;
+      game.audioStatus=ok?'음성 재생 완료':'음성 재생 실패 · 글자 표시';
+      if(!ok){game.voiceOnly=false;syncButtons();}
+      if(done)done(ok);
+    }
+    voicePlayer.onended=()=>finish(true);
+    voicePlayer.onerror=()=>finish(false);
+    try{
+      voicePlayer.src=src;
+      voicePlayer.load();
+      const playPromise=voicePlayer.play();
+      if(playPromise?.then)playPromise.then(()=>{
+        if(token===game.speechToken){game.spokenStarted=true;game.audioStatus='녹음 음성 재생 중';}
+      }).catch(()=>finish(false));
+      else {game.spokenStarted=true;game.audioStatus='녹음 음성 재생 시도';}
+    }catch(e){finish(false);}
+  }
+  function ensureAudio(){
+    // 성공/실패 효과음은 WebAudio로 생성하므로 별도 음원 파일이 없습니다.
+    try {
+      const AC=window.AudioContext||window.webkitAudioContext;
+      if (!AC) return;
+      if (!audioCtx) audioCtx=new AC();
+      if (audioCtx.state==='suspended') audioCtx.resume().catch(()=>{});
+    } catch(e){}
+  }
+  function beep(good){
+    if (!audioCtx || audioCtx.state!=='running') return;
+    const now=audioCtx.currentTime;
+    const freqs=good ? [550,720,940] : [360,270];
+    freqs.forEach((hz,i)=>{
+      const t=now+i*0.085;
+      const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+      osc.type='sine'; osc.frequency.value=hz;
+      gain.gain.setValueAtTime(0.0001,t);
+      gain.gain.exponentialRampToValueAtTime(0.09,t+0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001,t+0.17);
+      osc.connect(gain);gain.connect(audioCtx.destination);
+      osc.start(t);osc.stop(t+0.18);
+    });
+  }
+  function vibrate(){
+    const session=ui.scene.renderer?.xr?.getSession?.();
+    if(!session) return;
+    for(const source of session.inputSources){
+      const actuator=source.gamepad?.hapticActuators?.[0]||source.gamepad?.vibrationActuator;
+      try {
+        if(actuator?.pulse) actuator.pulse(0.2,80).catch?.(()=>{});
+        else if(actuator?.playEffect) actuator.playEffect('dual-rumble',{
+          duration:80,strongMagnitude:0.2,weakMagnitude:0.2
+        }).catch?.(()=>{});
+      } catch(e){}
+    }
+  }
+
+  function getSession(){return ui.scene.renderer?.xr?.getSession?.() || null;}
+  function sourceFor(which){
+    const s=getSession();if(!s)return null;
+    const h=which==='blue'?'left':'right';
+    return [...s.inputSources].find(x=>x.handedness===h && x.gamepad && !x.hand) || null;
+  }
+  function buttonEdge(which,name,pressed){
+    const b=handButtons[which];
+    const was=!!b[name];b[name]=!!pressed;
+    return !!pressed && !was;
+  }
+  function updateXRConnections(){
+    const session=getSession();
+    if(!session || !game.vr)return;
+    for(const which of ['blue','white']){
+      const src=sourceFor(which);
+      game.connected[which]=!!src;
+      (which==='blue'?ui.blueFlag:ui.whiteFlag).setAttribute('visible',!!src);
+      if(buttonEdge(which,'trigger',src?.gamepad?.buttons?.[0]?.pressed) &&
+          ['ready','finished'].includes(game.phase)) initGame();
+      if(which==='blue') {
+        // Quest 왼손 X(4): 다시 듣기 / Y(5): 명령 글자 표시 전환
+        if(buttonEdge('blue','x',src?.gamepad?.buttons?.[4]?.pressed) &&
+           ['playing','announcing'].includes(game.phase)) repeatCommand();
+        if(buttonEdge('blue','y',src?.gamepad?.buttons?.[5]?.pressed)) toggleText();
+      }
+    }
+    if(sessionWithEvent!==session) {
+      sessionWithEvent=session;
+      session.addEventListener('selectstart',()=>{
+        if(['ready','finished'].includes(game.phase)) initGame();
+      });
+    }
+  }
+  function controllerHeight(which){
+    if(!game.connected[which]) return null;
+    const source=sourceFor(which), manager=ui.scene.renderer?.xr;
+    const frame=manager?.getFrame?.(), space=manager?.getReferenceSpace?.();
+    if(source && frame && space) {
+      try {
+        const pose=frame.getPose(source.gripSpace||source.targetRaySpace,space);
+        const y=pose?.transform?.position?.y;
+        if(Number.isFinite(y) && y>0.08 && y<3) return y;
+      } catch(e){}
+    }
+    // 구형 브라우저를 위한 A-Frame 좌표 백업
+    const el=which==='blue'?ui.blue:ui.white;
+    el.object3D.updateMatrixWorld(true);
+    el.object3D.getWorldPosition(position);
+    return Number.isFinite(position.y) && position.y>0.08 && position.y<3 ? position.y : null;
+  }
+
+  // A-Frame의 기본 글꼴은 한글이 깨질 수 있어 캔버스 텍스처를 사용합니다.
+  if(typeof CanvasRenderingContext2D!=='undefined' &&
+     !CanvasRenderingContext2D.prototype.roundRect){
+    CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+      r=Math.min(typeof r==='number'?r:12,w/2,h/2);
+      this.moveTo(x+r,y);this.lineTo(x+w-r,y);
+      this.quadraticCurveTo(x+w,y,x+w,y+r);
+      this.lineTo(x+w,y+h-r);this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+      this.lineTo(x+r,y+h);this.quadraticCurveTo(x,y+h,x,y+h-r);
+      this.closePath();return this;
+    };
+  }
+  const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=800;
+  const ctx=canvas.getContext('2d');
+  function roundRect(x,y,w,h,r,c){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=c;ctx.fill();}
+  function text(str,x,y,size,c='#fff',align='left',weight=700){
+    ctx.textAlign=align;ctx.textBaseline='middle';
+    ctx.font=`${weight} ${size}px system-ui, 'Malgun Gothic',sans-serif`;
+    ctx.fillStyle=c;ctx.fillText(String(str),x,y);
+  }
+  function wrap(str,cx,y,maxWidth,lineHeight,size,c='#fff'){
+    ctx.font=`800 ${size}px system-ui, 'Malgun Gothic',sans-serif`;
+    const parts=String(str).split(' '), lines=[];let line='';
+    for(const part of parts){
+      const next=line?line+' '+part:part;
+      if(ctx.measureText(next).width>maxWidth && line){lines.push(line);line=part;}
+      else line=next;
+    }
+    if(line)lines.push(line);
+    lines.slice(0,3).forEach((v,i)=>text(v,cx,y+i*lineHeight,size,c,'center',800));
+  }
+  function drawPanel(now=performance.now()){
+    ctx.fillStyle='#102346';ctx.fillRect(0,0,1280,800);
+    roundRect(30,26,1220,101,25,'#1D3966');
+    text('🚩 청기백기 VR · 녹음 음성',64,77,48);
+    text(`${game.round}/${SETTINGS.totalRounds} ROUND`,1210,77,34,'#B1DCFF','right');
+    roundRect(50,157,563,130,23,'#123D74');
+    roundRect(666,157,563,130,23,'#526075');
+    text('🔵 청기 · 왼손',84,196,39);
+    text(game.actual.blue?'▲ 올림':'▼ 내림',563,238,36,game.actual.blue?'#85FFB0':'#E2EAFE','right');
+    text('⚪ 백기 · 오른손',699,196,39);
+    text(game.actual.white?'▲ 올림':'▼ 내림',1175,238,36,game.actual.white?'#85FFB0':'#E2EAFE','right');
+    let title='',detail='',tc='#fff';
+    if(game.phase==='ready'){
+      title='양손을 아래로 내리세요';
+      detail=game.vr?'트리거를 누르면 손 높이 기준을 다시 맞춥니다':'PC는 연습 시작 또는 스페이스';
+    }else if(game.phase==='calibrating'){
+      title='양손을 아래로 내리고 유지!';
+      detail=`${Math.max(1,Math.ceil((game.countdownAt-now)/1000))}초 동안 손의 기준 높이를 측정합니다`;
+    }else if(game.phase==='announcing'){
+      title=(game.voice && game.voiceOnly && !!voiceClips[game.command])?'🔊 음성 명령을 들으세요':game.command;
+      detail=game.voice?'명령 재생 후 제한시간 7초':'곧 시작합니다';
+    }else if(game.phase==='playing'){
+      title=(game.voice && game.voiceOnly && !!voiceClips[game.command])?'🔊 지시대로 깃발을 움직이세요!':game.command;
+      detail=game.trackingMissing?'손의 위치를 찾는 중 · 제한시간 일시 정지':'정답 자세를 0.5초 유지하세요 · X: 다시 듣기';
+    }else if(game.phase==='feedback'){
+      title=game.feedback;tc=game.feedbackGood?'#7BFFC0':'#FFC1C1';
+      detail=game.feedbackGood?'다음 음성 명령을 들으세요':'다음 문제에서 다시 도전해요';
+    }else if(game.phase==='finished'){
+      title='게임 완료!';detail='양손을 내린 뒤 트리거를 눌러 다시 시작';
+    }
+    roundRect(50,310,1179,263,26,'#0A1932');
+    wrap(title,640,399,1090,75,Math.min(65,title.length>22?53:65),tc);
+    text(detail,640,525,31,'#C9E1FF','center',600);
+    const seconds=game.phase==='playing'?Math.max(0,(game.deadline-now)/1000):0;
+    roundRect(50,596,1179,33,16,'#2C3D5F');
+    if(game.phase==='playing'){
+      roundRect(50,596,Math.max(5,1179*seconds/(SETTINGS.roundMs/1000)),33,16,seconds<2?'#FF7B7B':'#42D7C0');
+    }else if(game.phase==='calibrating'||game.phase==='announcing'){
+      roundRect(50,596,1179,33,16,'#42D7C0');
+    }
+    text(`점수 ${game.score}`,57,690,49);
+    text(`연속 정답 ${game.combo}`,640,690,36,'#BBD9FF','center');
+    text(game.phase==='playing'?`${seconds.toFixed(1)}초`:'X 다시 듣기 · Y 글자',1222,690,32,'#FFDF8B','right');
+    if(game.vr){
+      const l=controllerHeight('blue'),r=controllerHeight('white');
+      const fmt=y=>y===null?'미추적':`${y.toFixed(2)}m`;
+      text(`왼손 ${game.connected.blue?'연결':'대기'} ${fmt(l)}   ·   오른손 ${game.connected.white?'연결':'대기'} ${fmt(r)}`,640,747,25,'#A1C4F3','center',500);
+    }else text('PC 연습 · Q 청기 · P 백기 · 스페이스 시작',640,747,26,'#A1C4F3','center',500);
+    if(panelTexture)panelTexture.needsUpdate=true;
+    ui.live.textContent=`${game.phase} · ${game.command} · ${game.score}점 · ${game.audioStatus}`;
+  }
+  function syncButtons(){
+    document.getElementById('soundToggle').textContent=`음성: ${game.voice?'켜짐':'꺼짐'}`;
+    document.getElementById('textToggle').textContent=`명령 글자: ${game.voiceOnly?'숨김':'표시'}`;
+    drawPanel();
+  }
+  function toggleText(){game.voiceOnly=!game.voiceOnly;syncButtons();}
+  function resetHandFilters(){
+    game.smooth={blue:null,white:null};
+    game.lastY={blue:null,white:null};
+    game.pending={blue:null,white:null};
+    game.pendingAt={blue:0,white:0};
+  }
+  function initGame(){
+    if(!['ready','finished'].includes(game.phase))return;
+    if(game.vr && (!sourceFor('blue') || !sourceFor('white'))){
+      game.status='양손 컨트롤러 연결을 확인해 주세요';drawPanel();return;
+    }
+    ensureAudio();stopSpeech();
+    game.round=0;game.score=0;game.combo=0;game.bestCombo=0;
+    game.actual={blue:false,white:false};
+    game.target={blue:false,white:false};
+    game.samples={blue:[],white:[]};
+    game.baseline={blue:0,white:0};game.lastCommand='';
+    game.trackingMissing=false;resetHandFilters();
+    game.phase='calibrating';game.command='손을 아래로 내리고 준비';
+    game.countdownAt=performance.now()+SETTINGS.calibrateMs;
+    speak('청기 백기 게임을 시작합니다. 두 손을 아래로 내려 주세요.');
+    drawPanel();
+  }
+  function readCalibration(){
+    if(!game.vr)return;
+    for(const which of ['blue','white']){
+      const y=controllerHeight(which);
+      if(y===null)continue;
+      game.samples[which].push(y);
+      if(game.samples[which].length>40)game.samples[which].shift();
+    }
+  }
+  function median(array){
+    const a=[...array].sort((x,y)=>x-y);
+    const mid=Math.floor(a.length/2);
+    return a.length%2?a[mid]:(a[mid-1]+a[mid])/2;
+  }
+  function completeCalibration(now){
+    if(!game.vr){startRound(now);return;}
+    // 양손의 최근 40프레임을 검사해, 추적이 안정된 시점만 기준으로 삼습니다.
+    for(const which of ['blue','white']){
+      const a=game.samples[which];
+      if(a.length<15){
+        game.status='위치 추적 중입니다. 양손을 아래에서 조금 더 유지해 주세요';
+        game.countdownAt=now+600;drawPanel(now);return;
+      }
+      const med=median(a);
+      const bad=a.filter(v=>Math.abs(v-med)>0.13).length;
+      if(bad>a.length*0.35){
+        game.status='손이 움직이고 있습니다. 아래에서 잠시 멈춰 주세요';
+        game.samples[which]=a.slice(-12);
+        game.countdownAt=now+600;drawPanel(now);return;
+      }
+    }
+    game.baseline.blue=median(game.samples.blue);
+    game.baseline.white=median(game.samples.white);
+    resetHandFilters();
+    game.actual={blue:false,white:false};
+    startRound(now);
+  }
+  function chooseCommand(){
+    // 핵심 수정: 다음 명령은 '이전 목표'가 아니라 '실제 컨트롤러 상태'에서 계산.
+    let available=COMMANDS.map(c=>{
+      const target={
+        blue:c.blue===undefined?game.actual.blue:c.blue,
+        white:c.white===undefined?game.actual.white:c.white
+      };
+      return {command:c,target};
+    }).filter(x=>(x.target.blue!==game.actual.blue || x.target.white!==game.actual.white));
+    const different=available.filter(x=>x.command.text!==game.lastCommand);
+    if(different.length) available=different;
+    return available[Math.floor(Math.random()*available.length)];
+  }
+  function startRound(now){
+    if(game.round>=SETTINGS.totalRounds){
+      game.phase='finished';
+      game.command=`최종 점수 ${game.score}점`;
+      game.status='다시 시작하려면 양손을 내리고 트리거';
+      speak(`게임 끝! ${game.score}점입니다. 수고하셨어요!`);
+      drawPanel(now);return;
+    }
+    const picked=chooseCommand();
+    game.target=picked.target;
+    game.lastCommand=picked.command.text;
+    game.command=picked.command.text;
+    game.round++;
+    game.holdSince=0;
+    game.spokenStarted=false;
+    game.phase='announcing';
+    game.speechFallbackAt=now+SETTINGS.speechTimeoutMs;
+    game.status='음성 명령 안내 중';
+    // 명령을 말하는 동안 시간 측정을 시작하지 않습니다.
+    speak(game.command,()=>{
+      if(game.phase==='announcing')beginAnswer(performance.now());
+    });
+    drawPanel(now);
+  }
+  function beginAnswer(now){
+    if(game.phase!=='announcing')return;
+    stopSpeech();
+    game.phase='playing';
+    game.deadline=now+SETTINGS.roundMs;
+    game.holdSince=0;
+    game.status='명령 수행';
+    drawPanel(now);
+  }
+  function repeatCommand(){
+    if(!['announcing','playing'].includes(game.phase))return;
+    game.phase='announcing';
+    game.spokenStarted=false;
+    game.speechFallbackAt=performance.now()+SETTINGS.speechTimeoutMs;
+    speak(game.command,()=>{
+      if(game.phase==='announcing')beginAnswer(performance.now());
+    });
+    drawPanel();
+  }
+  function endRound(ok,now){
+    game.phase='feedback';game.feedbackGood=ok;
+    if(ok){
+      game.score+=10;game.combo++;game.bestCombo=Math.max(game.combo,game.bestCombo);
+      game.feedback='정답! +10점';vibrate();beep(true);
+    }else{game.combo=0;game.feedback='시간 초과!';beep(false);}
+    game.nextAt=now+SETTINGS.feedbackMs;
+    drawPanel(now);
+  }
+  function updateHands(now){
+    if(!game.vr || ['ready','calibrating','finished'].includes(game.phase))return;
+    let missing=false;
+    for(const which of ['blue','white']){
+      const y=controllerHeight(which);
+      if(y===null){missing=true;continue;}
+      // 지수 평활 + 별도의 올림/내림 기준(히스테리시스)으로 떨림 감소.
+      game.smooth[which]=game.smooth[which]===null?y:
+        (game.smooth[which]*0.72+y*0.28);
+      const diff=game.smooth[which]-game.baseline[which];
+      let candidate=game.actual[which];
+      if(diff>=SETTINGS.upMeters)candidate=true;
+      else if(diff<=SETTINGS.downMeters)candidate=false;
+      if(candidate===game.actual[which]){
+        game.pending[which]=null;
+        game.pendingAt[which]=0;
+      }else if(game.pending[which]!==candidate){
+        game.pending[which]=candidate;
+        game.pendingAt[which]=now;
+      }else if(now-game.pendingAt[which]>=SETTINGS.stateStableMs){
+        game.actual[which]=candidate;
+        game.pending[which]=null;
+      }
+    }
+    game.trackingMissing=missing || !game.connected.blue || !game.connected.white;
+  }
+  function tick(now,dt){
+    if(game.vr)updateXRConnections();
+    if(game.phase==='calibrating'){
+      readCalibration();
+      if(now>=game.countdownAt)completeCalibration(now);
+    }else{
+      updateHands(now);
+      if(game.phase==='announcing' && now>=game.speechFallbackAt){
+        // 음성이 재생되지 않거나 종료 이벤트가 누락되더라도 게임은 진행.
+        if(game.voice && !game.spokenStarted){
+          game.voiceOnly=false;game.audioStatus='음성 재생 확인 불가: 글자 표시';syncButtons();
+        }
+        beginAnswer(now);
+      }
+      if(game.phase==='playing'){
+        // 브라우저가 컨트롤러 pose를 잃으면 오답 처리 대신 남은 시간 정지.
+        if(game.trackingMissing){game.deadline+=Math.min(Math.max(0,dt),100);game.holdSince=0;}
+        else{
+          const correct=game.actual.blue===game.target.blue &&
+                        game.actual.white===game.target.white;
+          if(correct){
+            if(!game.holdSince)game.holdSince=now;
+            else if(now-game.holdSince>=SETTINGS.correctHoldMs)endRound(true,now);
+          }else game.holdSince=0;
+          if(game.phase==='playing' && now>=game.deadline)endRound(false,now);
+        }
+      }
+      if(game.phase==='feedback' && now>=game.nextAt)startRound(now);
+    }
+    if(now-lastPanelDraw>100){drawPanel(now);lastPanelDraw=now;}
+  }
+  AFRAME.registerComponent('game-manager',{tick:function(t,dt){tick(performance.now(),dt);}});
+  function bindController(which,el,flag){
+    el.addEventListener('controllerconnected',()=>{
+      game.connected[which]=true;flag.setAttribute('visible',true);drawPanel();
+    });
+    el.addEventListener('controllerdisconnected',()=>{
+      game.connected[which]=false;flag.setAttribute('visible',false);drawPanel();
+    });
+    el.addEventListener('triggerdown',()=>{
+      if(game.vr && ['ready','finished'].includes(game.phase))initGame();
+    });
+  }
+  bindController('blue',ui.blue,ui.blueFlag);
+  bindController('white',ui.white,ui.whiteFlag);
+  ui.scene.addEventListener('enter-vr',()=>{
+    game.vr=true;game.phase='ready';game.round=0;
+    game.command='양손을 아래로 내리고 트리거를 누르세요';
+    sessionWithEvent=null;
+    handButtons.blue={trigger:false,x:false,y:false};
+    handButtons.white={trigger:false};
+    ui.info.style.display='none';ui.footer.style.display='none';
+    drawPanel();
+  });
+  ui.scene.addEventListener('exit-vr',()=>{
+    stopSpeech();game.vr=false;game.phase='ready';
+    game.command='PC 연습 모드: 스페이스로 시작';
+    game.connected={blue:false,white:false};sessionWithEvent=null;
+    ui.info.style.display='block';ui.footer.style.display='block';
+    ui.blueFlag.setAttribute('visible',false);ui.whiteFlag.setAttribute('visible',false);
+    drawPanel();
+  });
+  function setupPanel(){
+    const el=document.getElementById('screen'),mesh=el.getObject3D('mesh');
+    if(!mesh)return;
+    panelTexture=new THREE.CanvasTexture(canvas);
+    panelTexture.colorSpace=THREE.SRGBColorSpace;
+    mesh.material.dispose();
+    mesh.material=new THREE.MeshBasicMaterial({map:panelTexture,side:THREE.DoubleSide});
+    drawPanel();
+  }
+  if(ui.scene.hasLoaded)setupPanel();
+  else ui.scene.addEventListener('loaded',setupPanel,{once:true});
+  document.getElementById('desktopStart').addEventListener('click',initGame);
+  document.getElementById('toneTest').addEventListener('click',async()=>{
+    // 이 버튼은 브라우저 TTS를 사용하지 않습니다. 실제 tone.wav를 재생해 오디오 출력 확인.
+    const tone=new Audio('./tone.wav?v=4');
+    tone.volume=1;
+    try{
+      await tone.play();
+      game.audioStatus='효과음 재생 성공: 소리가 들렸는지 확인하세요';
+      ui.live.textContent='효과음 재생 중. 소리가 안 나면 퀘스트 기기 볼륨/브라우저 오디오를 확인하세요.';
+    }catch(e){
+      game.audioStatus='효과음 재생 실패: '+e.message;
+      ui.live.textContent=game.audioStatus;
+    }
+  });
+  document.getElementById('soundTest').addEventListener('click',async()=>{
+    await voicePackPromise;
+    if(!voiceClips[COMMANDS[0].text]){
+      game.audioStatus='음성팩 없음: PC에서 make_voice.html을 열어 녹음해 주세요';
+      ui.live.textContent=game.audioStatus;
+      return;
+    }
+    game.spokenStarted=false;
+    speak(COMMANDS[0].text,success=>{
+      ui.live.textContent=success?'명령 음성 재생 완료':'명령 재생 실패: 효과음 테스트 확인';
+    });
+  });
+  document.getElementById('soundToggle').addEventListener('click',()=>{
+    game.voice=!game.voice;
+    if(!game.voice){stopSpeech();game.voiceOnly=false;}
+    syncButtons();
+  });
+  document.getElementById('textToggle').addEventListener('click',toggleText);
+  document.addEventListener('keydown',e=>{
+    if(game.vr || e.repeat)return;
+    const k=e.key.toLowerCase();
+    if(k===' '){e.preventDefault();if(['ready','finished'].includes(game.phase))initGame();}
+    if(k==='q')game.actual.blue=!game.actual.blue;
+    if(k==='p')game.actual.white=!game.actual.white;
+    if(k==='r' && ['playing','announcing'].includes(game.phase))repeatCommand();
+    drawPanel();
+  });
+  syncButtons();
+  </script>
+</body>
+</html>
